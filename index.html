@@ -11,7 +11,18 @@
 <body>
     <div class="app-container">
         <header class="header">
-            <h1 class="title">考勤打卡系统</h1>
+            <div class="header-top">
+                <h1 class="title">考勤打卡系统</h1>
+                <div class="header-actions">
+                    <div id="user-badge" class="user-badge hidden">
+                        <span class="user-icon">👤</span>
+                        <span id="user-display-name">已登录</span>
+                        <button id="logout-btn" class="logout-btn" title="退出登录">退出</button>
+                    </div>
+                    <button id="login-btn" class="login-btn">🔑 登录 / 注册</button>
+                    <button id="settings-btn" class="settings-btn" title="系统设置">⚙️ 设置</button>
+                </div>
+            </div>
             <div class="clock-container">
                 <div id="clock-display" class="clock-display">00:00:00</div>
                 <div id="date-display" class="date-display">YYYY年MM月DD日</div>
@@ -19,6 +30,33 @@
         </header>
 
         <main class="main-content">
+            <!-- 随机自动打卡引擎控制面板 (Task 3) -->
+            <section class="auto-checkin-panel" id="auto-checkin-panel">
+                <div class="panel-header">
+                    <h2 class="section-title">⚡ 随机自动打卡引擎</h2>
+                    <label class="switch-container">
+                        <input type="checkbox" id="auto-checkin-toggle" checked>
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+                <div class="panel-content">
+                    <div class="auto-status-card">
+                        <div class="auto-info-item">
+                            <span class="info-label">预定打卡类型</span>
+                            <span id="next-target-type" class="info-value">上班打卡 (09:25-09:30)</span>
+                        </div>
+                        <div class="auto-info-item">
+                            <span class="info-label">随机目标时刻</span>
+                            <span id="target-time-display" class="info-value highlight">--:--:--</span>
+                        </div>
+                    </div>
+                    <div class="countdown-box">
+                        <span class="countdown-label">自动打卡倒计时</span>
+                        <div id="countdown-display" class="countdown-value">00:00:00</div>
+                    </div>
+                </div>
+            </section>
+
             <section class="stats-panel">
                 <div class="stat-card">
                     <span class="stat-label">打卡总数</span>
@@ -43,6 +81,9 @@
                 <button id="clock-out-btn" class="action-btn clock-out-btn">下班打卡</button>
             </section>
 
+            <!-- Email / Sync Toast Notification -->
+            <div id="email-toast" class="toast hidden"></div>
+
             <section class="history-panel">
                 <h2 class="section-title">打卡记录</h2>
                 <div class="table-container">
@@ -52,16 +93,132 @@
                                 <th>类型</th>
                                 <th>时间</th>
                                 <th>状态</th>
+                                <th>邮件发送状态</th>
                             </tr>
                         </thead>
                         <tbody id="records-body">
-                            <!-- Records will be inserted here -->
+                            <!-- Records inserted here -->
                         </tbody>
                     </table>
                 </div>
                 <button id="clear-btn" class="clear-btn">清空打卡记录</button>
             </section>
         </main>
+    </div>
+
+    <!-- System Settings Modal (Task 1) -->
+    <div id="settings-modal" class="modal-backdrop hidden">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2 class="modal-title">系统设置 ⚙️</h2>
+                <button id="close-settings-btn" class="modal-close-btn">&times;</button>
+            </div>
+            <form id="settings-form" class="modal-body">
+                <div class="form-section-title">👤 个人信息注册</div>
+                <div class="form-group">
+                    <label for="employee-name">员工姓名 (名前) <span class="required-star">*</span></label>
+                    <input type="text" id="employee-name" class="form-control" placeholder="例如: 紀標" required>
+                </div>
+
+                <div class="form-section-title">📧 邮箱通知设置</div>
+                <div class="form-group">
+                    <label for="hr-email">HR 接收邮箱 <span class="required-star">*</span></label>
+                    <input type="email" id="hr-email" class="form-control" placeholder="hr@company.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="user-email">个人邮箱 (抄送 CC) <span class="required-star">*</span></label>
+                    <input type="email" id="user-email" class="form-control" placeholder="employee@company.com" required>
+                </div>
+
+                <div class="form-section-title">🔧 SMTP 发送服务配置</div>
+                <div class="form-row">
+                    <div class="form-group col-8">
+                        <label for="smtp-host">SMTP 服务器</label>
+                        <input type="text" id="smtp-host" class="form-control" placeholder="smtp.qq.com">
+                    </div>
+                    <div class="form-group col-4">
+                        <label for="smtp-port">端口</label>
+                        <input type="number" id="smtp-port" class="form-control" placeholder="465">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="smtp-user">SMTP 账号</label>
+                    <input type="text" id="smtp-user" class="form-control" placeholder="your_email@qq.com">
+                </div>
+                <div class="form-group">
+                    <label for="smtp-pass">SMTP 密码 / 授权码</label>
+                    <input type="password" id="smtp-pass" class="form-control" placeholder="如 QQ 邮箱授权码">
+                </div>
+                <div class="form-group checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="auto-email-toggle" checked>
+                        <span>打卡成功后自动发送邮件通知 HR 并 CC 给自己</span>
+                    </label>
+                </div>
+                <div id="settings-msg" class="settings-msg hidden"></div>
+                <div class="modal-footer">
+                    <button type="button" id="cancel-settings-btn" class="btn btn-secondary">取消</button>
+                    <button type="submit" class="btn btn-primary">保存设置</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- User Authentication Modal (Multi-User Login / Register) -->
+    <div id="auth-modal" class="modal-backdrop hidden">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div class="auth-tabs">
+                    <button type="button" id="tab-login-btn" class="auth-tab-btn active">🔑 账号登录</button>
+                    <button type="button" id="tab-register-btn" class="auth-tab-btn">📝 用户注册</button>
+                </div>
+                <button id="close-auth-btn" class="modal-close-btn">&times;</button>
+            </div>
+            
+            <!-- Login Form -->
+            <form id="login-form" class="modal-body auth-form">
+                <div class="form-group">
+                    <label for="login-username">用户名 / 电子邮箱</label>
+                    <input type="text" id="login-username" class="form-control" placeholder="请输入用户名或邮箱" required>
+                </div>
+                <div class="form-group">
+                    <label for="login-password">密码</label>
+                    <input type="password" id="login-password" class="form-control" placeholder="请输入密码" required>
+                </div>
+                <div id="login-error-msg" class="auth-error-msg hidden"></div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary full-width">立即登录</button>
+                </div>
+            </form>
+
+            <!-- Register Form -->
+            <form id="register-form" class="modal-body auth-form hidden">
+                <div class="form-group">
+                    <label for="reg-username">用户名 <span class="required-star">*</span></label>
+                    <input type="text" id="reg-username" class="form-control" placeholder="3位以上字符" required minlength="3">
+                </div>
+                <div class="form-group">
+                    <label for="reg-employee-name">员工姓名 (名前) <span class="required-star">*</span></label>
+                    <input type="text" id="reg-employee-name" class="form-control" placeholder="例如: 紀標" required>
+                </div>
+                <div class="form-group">
+                    <label for="reg-email">个人电子邮箱 <span class="required-star">*</span></label>
+                    <input type="email" id="reg-email" class="form-control" placeholder="your_name@company.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="reg-password">密码 <span class="required-star">*</span></label>
+                    <input type="password" id="reg-password" class="form-control" placeholder="至少6位密码" required minlength="6">
+                </div>
+                <div class="form-group">
+                    <label for="reg-confirm-password">确认密码 <span class="required-star">*</span></label>
+                    <input type="password" id="reg-confirm-password" class="form-control" placeholder="再次输入密码" required minlength="6">
+                </div>
+                <div id="reg-error-msg" class="auth-error-msg hidden"></div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-success full-width">注册并登录</button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <script src="app.js"></script>

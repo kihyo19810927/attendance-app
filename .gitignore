@@ -1,0 +1,10 @@
+# Node dependencies
+node_modules/
+
+# Environment & Sensitive Credentials
+.env
+credentials/*.json
+!credentials/README.md
+
+# Log files
+*.log
