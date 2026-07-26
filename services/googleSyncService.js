@@ -1,5 +1,6 @@
 const { google } = require('googleapis');
 const path = require('path');
+const fs = require('fs');
 
 class GoogleSyncService {
     constructor() {
@@ -9,7 +10,7 @@ class GoogleSyncService {
     }
 
     /**
-     * Initialize Google Auth & Sheets API client using Service Account credentials
+     * Initialize Google Auth & Sheets API client using Service Account credentials or GCP ADC
      */
     async init() {
         if (this.initialized) return;
@@ -18,12 +19,17 @@ class GoogleSyncService {
             const keyFilePath = process.env.GOOGLE_APPLICATION_CREDENTIALS || 
                 path.join(__dirname, '../credentials/service-account.json');
 
-            this.auth = new google.auth.GoogleAuth({
-                keyFile: keyFilePath,
+            const authConfig = {
                 scopes: [
                     'https://www.googleapis.com/auth/spreadsheets'
                 ]
-            });
+            };
+
+            if (fs.existsSync(keyFilePath)) {
+                authConfig.keyFile = keyFilePath;
+            }
+
+            this.auth = new google.auth.GoogleAuth(authConfig);
 
             const authClient = await this.auth.getClient();
             this.sheets = google.sheets({ version: 'v4', auth: authClient });
