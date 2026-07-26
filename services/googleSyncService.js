@@ -26,11 +26,19 @@ class GoogleSyncService {
             };
 
             if (process.env.GOOGLE_CREDENTIALS_JSON) {
-                authConfig.credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
+                const creds = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
+                if (creds.private_key) {
+                    creds.private_key = creds.private_key.replace(/\\n/g, '\n');
+                }
+                authConfig.credentials = creds;
                 console.log('[GoogleSyncService] Using credentials from GOOGLE_CREDENTIALS_JSON env var.');
             } else if (process.env.GOOGLE_CREDENTIALS_BASE64) {
                 const decodedJson = Buffer.from(process.env.GOOGLE_CREDENTIALS_BASE64, 'base64').toString('utf8');
-                authConfig.credentials = JSON.parse(decodedJson);
+                const creds = JSON.parse(decodedJson);
+                if (creds.private_key) {
+                    creds.private_key = creds.private_key.replace(/\\n/g, '\n');
+                }
+                authConfig.credentials = creds;
                 console.log('[GoogleSyncService] Using credentials from GOOGLE_CREDENTIALS_BASE64 env var.');
             } else if (fs.existsSync(keyFilePath)) {
                 authConfig.keyFile = keyFilePath;
