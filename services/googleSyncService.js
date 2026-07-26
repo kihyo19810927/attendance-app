@@ -25,8 +25,18 @@ class GoogleSyncService {
                 ]
             };
 
-            if (fs.existsSync(keyFilePath)) {
+            if (process.env.GOOGLE_CREDENTIALS_JSON) {
+                authConfig.credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
+                console.log('[GoogleSyncService] Using credentials from GOOGLE_CREDENTIALS_JSON env var.');
+            } else if (process.env.GOOGLE_CREDENTIALS_BASE64) {
+                const decodedJson = Buffer.from(process.env.GOOGLE_CREDENTIALS_BASE64, 'base64').toString('utf8');
+                authConfig.credentials = JSON.parse(decodedJson);
+                console.log('[GoogleSyncService] Using credentials from GOOGLE_CREDENTIALS_BASE64 env var.');
+            } else if (fs.existsSync(keyFilePath)) {
                 authConfig.keyFile = keyFilePath;
+                console.log('[GoogleSyncService] Using local keyFile:', keyFilePath);
+            } else {
+                console.log('[GoogleSyncService] Using GCP Application Default Credentials (ADC).');
             }
 
             this.auth = new google.auth.GoogleAuth(authConfig);
