@@ -57,7 +57,8 @@ class GoogleSyncService {
      * @param {Object} record - { type, timestamp, status, employeeName, userEmail }
      */
     async appendToSheets(record) {
-        const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID ? process.env.GOOGLE_SPREADSHEET_ID.trim() : '';
+        const rawSpreadsheetId = process.env.GOOGLE_SPREADSHEET_ID || process.env['GOOGLE SPREADSHEET ID'] || '';
+        const spreadsheetId = rawSpreadsheetId.trim();
 
         if (!spreadsheetId || spreadsheetId.includes('your_google_spreadsheet_id')) {
             console.warn('[GoogleSyncService] GOOGLE_SPREADSHEET_ID is not configured.');
