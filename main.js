@@ -6,6 +6,8 @@ const dbHelper = require('./database/db');
 const excelSyncService = require('./services/excelSyncService');
 const emailService = require('./services/emailService');
 
+const APP_NAME = '考勤打卡桌面客户端';
+
 let mainWindow = null;
 let tray = null;
 
@@ -32,7 +34,7 @@ function createWindow() {
         if (!app.isQuitting) {
             event.preventDefault();
             mainWindow.hide();
-            showNotification('考勤打卡客户端', '程序已缩小至右下角系统托盘后台运行');
+            showNotification('程序已缩小至右下角系统托盘后台运行');
         }
     });
 }
@@ -40,7 +42,7 @@ function createWindow() {
 function createTray() {
     const iconPath = path.join(__dirname, 'assets/icon.png');
     tray = new Tray(iconPath);
-    tray.setToolTip('考勤打卡系统 (后台静默运行中)');
+    tray.setToolTip(`${APP_NAME} (后台静默运行中)`);
 
     const contextMenu = Menu.buildFromTemplate([
         {
@@ -71,9 +73,12 @@ function createTray() {
     });
 }
 
-function showNotification(title, body) {
+function showNotification(bodyMessage) {
     if (Notification.isSupported()) {
-        new Notification({ title, body }).show();
+        new Notification({ 
+            title: APP_NAME, 
+            body: bodyMessage 
+        }).show();
     }
 }
 
@@ -232,8 +237,8 @@ ipcMain.handle('punch', async (event, params) => {
         }
     }
 
-    const typeTitle = type === 'clock-in' ? '上班打卡成功 ⏰' : '下班打卡成功 🌆';
-    showNotification(typeTitle, `时间: ${timeStr} | 状态: ${status === 'normal' ? '正常' : status}`);
+    const punchTypeLabel = type === 'clock-in' ? '上班打卡成功 ⏰' : '下班打卡成功 🌆';
+    showNotification(`${punchTypeLabel} | 时间: ${timeStr} | 状态: ${status === 'normal' ? '正常' : status}`);
 
     return {
         success: true,
@@ -288,6 +293,6 @@ ipcMain.handle('manual-punch', async (event, params) => {
         }
     }
 
-    showNotification('补打卡修改成功 📝', `已更新 ${dateStr} 的考勤数据`);
+    showNotification(`补打卡数据修正成功 📝 | 已更新 ${dateStr} 的考勤数据`);
     return { success: true, record: savedRecord };
 });
