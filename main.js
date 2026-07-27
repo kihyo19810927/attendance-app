@@ -13,10 +13,10 @@ let tray = null;
 
 function createWindow() {
     mainWindow = new BrowserWindow({
-        width: 1000,
-        height: 750,
-        minWidth: 800,
-        minHeight: 600,
+        width: 980,
+        height: 720,
+        resizable: false,
+        maximizable: false,
         frame: true,
         icon: path.join(__dirname, 'assets/icon.png'),
         webPreferences: {
