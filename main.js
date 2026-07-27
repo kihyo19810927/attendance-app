@@ -24,6 +24,7 @@ function createWindow() {
         }
     });
 
+    Menu.setApplicationMenu(null);
     mainWindow.loadFile('index.html');
 
     // Minimize to tray on close
