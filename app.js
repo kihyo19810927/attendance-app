@@ -25,6 +25,7 @@ class DesktopAttendanceApp {
             openExcelBtn: document.getElementById('open-excel-btn'),
             openArchiveBtn: document.getElementById('open-archive-btn'),
             manualPunchBtn: document.getElementById('manual-punch-btn'),
+            clearRecordsBtn: document.getElementById('clear-records-btn'),
 
             // Manual Modal
             manualModal: document.getElementById('manual-modal'),
@@ -44,9 +45,13 @@ class DesktopAttendanceApp {
             cancelSettingsBtn: document.getElementById('cancel-settings-btn'),
             settingsForm: document.getElementById('settings-form'),
             settingsMsg: document.getElementById('settings-msg'),
+            exportJsonBtn: document.getElementById('export-json-btn'),
+            importJsonBtn: document.getElementById('import-json-btn'),
+            jsonFileInput: document.getElementById('json-file-input'),
 
             // Config Form Elements
             cfgEmployeeName: document.getElementById('cfg-employee-name'),
+            cfgExcelStorageDir: document.getElementById('cfg-excel-storage-dir'),
             cfgEmailTo: document.getElementById('cfg-email-to'),
             cfgEmailCc: document.getElementById('cfg-email-cc'),
             cfgEmailSubject: document.getElementById('cfg-email-subject'),
@@ -104,7 +109,6 @@ class DesktopAttendanceApp {
             this.elements.userDisplay.textContent = `👤 ${cfg.employee_name || '紀標'}`;
         }
 
-        // Show auto check-in panel ONLY if auto punch is enabled in settings
         if (this.elements.autoCheckinPanel) {
             if (cfg.auto_punch_enabled === '1') {
                 this.elements.autoCheckinPanel.classList.remove('hidden');
@@ -139,6 +143,11 @@ class DesktopAttendanceApp {
 
         this.elements.manualPunchBtn.addEventListener('click', () => this.openManualModal());
 
+        // Clear Records Button
+        if (this.elements.clearRecordsBtn) {
+            this.elements.clearRecordsBtn.addEventListener('click', () => this.handleClearRecords());
+        }
+
         // Manual Punch Modal
         this.elements.closeManualBtn.addEventListener('click', () => this.closeManualModal());
         this.elements.cancelManualBtn.addEventListener('click', () => this.closeManualModal());
@@ -149,6 +158,24 @@ class DesktopAttendanceApp {
         this.elements.closeSettingsBtn.addEventListener('click', () => this.closeSettingsModal());
         this.elements.cancelSettingsBtn.addEventListener('click', () => this.closeSettingsModal());
         this.elements.settingsForm.addEventListener('submit', (e) => this.handleSettingsSubmit(e));
+
+        // JSON Config Import & Export
+        if (this.elements.exportJsonBtn) {
+            this.elements.exportJsonBtn.addEventListener('click', () => this.exportConfigJson());
+        }
+        if (this.elements.importJsonBtn && this.elements.jsonFileInput) {
+            this.elements.importJsonBtn.addEventListener('click', () => this.elements.jsonFileInput.click());
+            this.elements.jsonFileInput.addEventListener('change', (e) => this.importConfigJson(e));
+        }
+    }
+
+    async handleClearRecords() {
+        if (confirm('⚠️ 警告：确定要清空所有 SQLite 及 Excel 考勤打卡历史记录吗？此操作无法撤销！')) {
+            this.showToast('⌛ 正在清空打卡历史记录...', 'info');
+            await window.electronAPI.clearRecords();
+            await this.loadRecords();
+            this.showToast('🗑️ 所有考勤打卡记录已成功清空！', 'success');
+        }
     }
 
     async handlePunch(type) {
@@ -205,6 +232,7 @@ class DesktopAttendanceApp {
     openSettingsModal() {
         const cfg = this.config;
         this.elements.cfgEmployeeName.value = cfg.employee_name || '';
+        this.elements.cfgExcelStorageDir.value = cfg.excel_storage_dir || './attendance_files';
         this.elements.cfgEmailTo.value = cfg.email_to || '';
         this.elements.cfgEmailCc.value = cfg.email_cc || '';
         this.elements.cfgEmailSubject.value = cfg.email_subject_tpl || '';
@@ -233,6 +261,7 @@ class DesktopAttendanceApp {
         e.preventDefault();
         const updatedConfig = {
             employee_name: this.elements.cfgEmployeeName.value.trim(),
+            excel_storage_dir: this.elements.cfgExcelStorageDir.value.trim() || './attendance_files',
             email_to: this.elements.cfgEmailTo.value.trim(),
             email_cc: this.elements.cfgEmailCc.value.trim(),
             email_subject_tpl: this.elements.cfgEmailSubject.value,
@@ -263,6 +292,41 @@ class DesktopAttendanceApp {
         }, 1000);
     }
 
+    exportConfigJson() {
+        const jsonStr = JSON.stringify(this.config, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `attendance_config_${this.config.employee_name || 'settings'}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        this.showToast('📤 设置文件 (JSON) 导出成功！', 'success');
+    }
+
+    importConfigJson(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const imported = JSON.parse(e.target.result);
+                if (typeof imported === 'object') {
+                    this.config = await window.electronAPI.saveConfig(imported);
+                    this.openSettingsModal();
+                    this.updateConfigUI();
+                    this.elements.settingsMsg.textContent = '📥 设置 JSON 文件已成功导入并保存！';
+                    this.elements.settingsMsg.className = 'settings-msg success';
+                    this.elements.settingsMsg.classList.remove('hidden');
+                }
+            } catch (err) {
+                alert('解析 JSON 配置文件失败，请检查文件格式。');
+            }
+        };
+        reader.readAsText(file);
+    }
+
     initAutoPunchEngine() {
         this.calculateNextRandomTarget();
         this.startAutoCountdownTimer();
@@ -272,7 +336,6 @@ class DesktopAttendanceApp {
         const now = new Date();
         const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
         
-        // Holiday / Weekend check for AUTO punch
         const dayOfWeek = now.getDay();
         const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
         const skipHolidays = this.config.skip_holidays_enabled === '1';
@@ -379,7 +442,6 @@ class DesktopAttendanceApp {
     }
 
     renderStats() {
-        // Expand into individual punch events for stats & list
         let totalPunches = 0;
         let normalCount = 0;
         let lateCount = 0;
@@ -407,7 +469,6 @@ class DesktopAttendanceApp {
     renderRecords() {
         this.elements.recordsBody.innerHTML = '';
 
-        // Expand each record into individual punch events (打一次就是一行记录)
         const punchEvents = [];
 
         this.records.forEach(r => {
@@ -436,7 +497,6 @@ class DesktopAttendanceApp {
             }
         });
 
-        // Sort by time DESC (newest punch at top)
         punchEvents.sort((a, b) => b.sortKey.localeCompare(a.sortKey));
         
         if (punchEvents.length === 0) {

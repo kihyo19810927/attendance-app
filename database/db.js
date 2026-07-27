@@ -91,6 +91,7 @@ function initDatabaseSchema() {
     if (count === 0) {
         const defaultConfig = {
             employee_name: '紀標',
+            excel_storage_dir: './attendance_files',
             email_to: 'hr@company.com',
             email_cc: '',
             email_subject_tpl: '【考勤打卡通知】{employeeName} - {date} {type} ({status})',
@@ -230,11 +231,22 @@ async function saveAttendanceRecord(record) {
     return await getTodayRecord(record.record_date);
 }
 
+/**
+ * Clear all attendance records from SQLite
+ */
+async function clearAllRecords() {
+    const database = await getDb();
+    database.run('DELETE FROM attendance_records');
+    saveDbFile();
+    return true;
+}
+
 module.exports = {
     getDb,
     getAllConfig,
     saveConfig,
     getTodayRecord,
     getAllRecords,
-    saveAttendanceRecord
+    saveAttendanceRecord,
+    clearAllRecords
 };

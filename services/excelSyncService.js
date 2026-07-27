@@ -5,31 +5,51 @@ const fs = require('fs');
 class ExcelSyncService {
     constructor() {
         this.projectRoot = path.join(__dirname, '..');
-        this.archiveDir = path.join(this.projectRoot, 'archive');
     }
 
     /**
-     * Ensure archive directory exists
+     * Resolve base storage directory configured in System Settings
+     * Default: ./attendance_files
+     * @param {string} configuredDir
+     * @returns {string} Absolute directory path
      */
-    ensureArchiveDir() {
-        if (!fs.existsSync(this.archiveDir)) {
-            fs.mkdirSync(this.archiveDir, { recursive: true });
+    resolveStorageDir(configuredDir) {
+        let targetDir = configuredDir || './attendance_files';
+        if (!path.isAbsolute(targetDir)) {
+            targetDir = path.resolve(this.projectRoot, targetDir);
         }
+        if (!fs.existsSync(targetDir)) {
+            fs.mkdirSync(targetDir, { recursive: true });
+        }
+        return targetDir;
     }
 
     /**
-     * Auto archive previous months' Excel files into archive/ directory
-     * Pattern: {username}_{YYYYMM}.xlsx
-     * @param {string} employeeName
+     * Ensure archive directory exists inside storage directory
+     * @param {string} storageDir
+     * @returns {string} Archive directory path
      */
-    archiveOldFiles(employeeName) {
-        this.ensureArchiveDir();
+    ensureArchiveDir(storageDir) {
+        const archiveDir = path.join(storageDir, 'archive');
+        if (!fs.existsSync(archiveDir)) {
+            fs.mkdirSync(archiveDir, { recursive: true });
+        }
+        return archiveDir;
+    }
+
+    /**
+     * Auto archive previous months' Excel files into {storageDir}/archive/
+     * @param {string} employeeName
+     * @param {string} storageDir
+     */
+    archiveOldFiles(employeeName, storageDir) {
+        const archiveDir = this.ensureArchiveDir(storageDir);
         const safeName = (employeeName || '紀標').trim();
         const now = new Date();
         const currentYearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
 
         try {
-            const files = fs.readdirSync(this.projectRoot);
+            const files = fs.readdirSync(storageDir);
             const pattern = new RegExp(`^${safeName}_(\\d{6})\\.xlsx$`);
 
             files.forEach(file => {
@@ -37,10 +57,10 @@ class ExcelSyncService {
                 if (match) {
                     const fileYearMonth = match[1];
                     if (fileYearMonth < currentYearMonth) {
-                        const oldPath = path.join(this.projectRoot, file);
-                        const newPath = path.join(this.archiveDir, file);
+                        const oldPath = path.join(storageDir, file);
+                        const newPath = path.join(archiveDir, file);
                         fs.renameSync(oldPath, newPath);
-                        console.log(`[ExcelSync] Archived old file: ${file} -> archive/${file}`);
+                        console.log(`[ExcelSync] Archived file: ${file} -> archive/${file}`);
                     }
                 }
             });
@@ -66,7 +86,7 @@ class ExcelSyncService {
             const endSec = h2 * 3600 + m2 * 60 + (s2 || 0);
 
             let diffSec = endSec - startSec;
-            if (diffSec < 0) diffSec += 24 * 3600; // Handle overnight
+            if (diffSec < 0) diffSec += 24 * 3600;
 
             const hours = Math.floor(diffSec / 3600);
             const mins = Math.floor((diffSec % 3600) / 60);
@@ -78,28 +98,29 @@ class ExcelSyncService {
     }
 
     /**
-     * Get or create Excel workbook file for the record's date
+     * Get or create Excel workbook file for the record's date inside storageDir
      * @param {string} employeeName
      * @param {Date} dateObj
+     * @param {string} configuredStorageDir
      * @returns {{ filePath: string, workbook: ExcelJS.Workbook, worksheet: ExcelJS.Worksheet }}
      */
-    async getOrCreateWorkbook(employeeName, dateObj) {
+    async getOrCreateWorkbook(employeeName, dateObj, configuredStorageDir) {
+        const storageDir = this.resolveStorageDir(configuredStorageDir);
         const safeName = (employeeName || '紀標').trim();
         const year = dateObj.getFullYear();
         const monthStr = String(dateObj.getMonth() + 1).padStart(2, '0');
         const yearMonth = `${year}${monthStr}`;
         const fileName = `${safeName}_${yearMonth}.xlsx`;
 
-        // Check if file is for current month or past month
         const now = new Date();
         const currentYearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
         
-        let targetFilePath = path.join(this.projectRoot, fileName);
+        let targetFilePath = path.join(storageDir, fileName);
         if (yearMonth < currentYearMonth) {
-            this.ensureArchiveDir();
-            targetFilePath = path.join(this.archiveDir, fileName);
+            const archiveDir = this.ensureArchiveDir(storageDir);
+            targetFilePath = path.join(archiveDir, fileName);
         } else {
-            this.archiveOldFiles(safeName);
+            this.archiveOldFiles(safeName, storageDir);
         }
 
         const workbook = new ExcelJS.Workbook();
@@ -111,7 +132,6 @@ class ExcelSyncService {
         } else {
             worksheet = workbook.addWorksheet('考勤記録');
             
-            // Header columns (No 1, 2, 3, 4 numbers)
             worksheet.columns = [
                 { header: '日期', key: 'date', width: 16 },
                 { header: '出社時間', key: 'clock_in', width: 16 },
@@ -119,7 +139,6 @@ class ExcelSyncService {
                 { header: '工作時間', key: 'working_hours', width: 18 }
             ];
 
-            // Style headers
             const headerRow = worksheet.getRow(1);
             headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
             headerRow.fill = {
@@ -136,22 +155,20 @@ class ExcelSyncService {
     /**
      * Append or update attendance row in local Excel file
      * Columns: [日期, 出社時間, 退社時間, 工作時間]
-     * @param {Object} params - { employeeName, dateStr, clockInTime, clockOutTime }
+     * @param {Object} params - { employeeName, configuredStorageDir, dateStr, clockInTime, clockOutTime }
      */
     async syncRecord(params) {
-        const { employeeName, dateStr, clockInTime, clockOutTime } = params;
+        const { employeeName, configuredStorageDir, dateStr, clockInTime, clockOutTime } = params;
 
-        // Parse date
         const [y, m, d] = dateStr.split('-').map(Number);
         const dateObj = new Date(y, m - 1, d);
         const formattedDate = `${y}/${String(m).padStart(2, '0')}/${String(d).padStart(2, '0')}`;
 
-        const { filePath, workbook, worksheet } = await this.getOrCreateWorkbook(employeeName, dateObj);
+        const { filePath, workbook, worksheet } = await this.getOrCreateWorkbook(employeeName, dateObj, configuredStorageDir);
 
-        // Find existing row by Date (Column 1)
         let targetRowIndex = -1;
         worksheet.eachRow((row, rowNumber) => {
-            if (rowNumber > 1) { // Skip header
+            if (rowNumber > 1) {
                 const cellVal = String(row.getCell(1).value || '').trim();
                 if (cellVal === formattedDate) {
                     targetRowIndex = rowNumber;
@@ -160,7 +177,6 @@ class ExcelSyncService {
         });
 
         if (targetRowIndex > 1) {
-            // Update existing row
             const row = worksheet.getRow(targetRowIndex);
             
             let finalClockIn = clockInTime || row.getCell(2).value || '';
@@ -174,7 +190,6 @@ class ExcelSyncService {
             row.alignment = { vertical: 'middle', horizontal: 'center' };
             row.commit();
         } else {
-            // Add new row at bottom
             const newClockIn = clockInTime || '';
             const newClockOut = clockOutTime || '';
             const workingHours = this.calculateWorkingHours(newClockIn, newClockOut);
@@ -190,8 +205,42 @@ class ExcelSyncService {
         }
 
         await workbook.xlsx.writeFile(filePath);
-        console.log(`[ExcelSync] Successfully updated Excel record in: ${filePath}`);
+        console.log(`[ExcelSync] Updated Excel record in: ${filePath}`);
         return { success: true, filePath };
+    }
+
+    /**
+     * Clear Excel data rows
+     * @param {string} employeeName 
+     * @param {string} configuredStorageDir 
+     */
+    async clearExcelRecords(employeeName, configuredStorageDir) {
+        const storageDir = this.resolveStorageDir(configuredStorageDir);
+        const safeName = (employeeName || '紀標').trim();
+        const now = new Date();
+        const yearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+        const fileName = `${safeName}_${yearMonth}.xlsx`;
+        const filePath = path.join(storageDir, fileName);
+
+        if (fs.existsSync(filePath)) {
+            const workbook = new ExcelJS.Workbook();
+            const worksheet = workbook.addWorksheet('考勤記録');
+            worksheet.columns = [
+                { header: '日期', key: 'date', width: 16 },
+                { header: '出社時間', key: 'clock_in', width: 16 },
+                { header: '退社時間', key: 'clock_out', width: 16 },
+                { header: '工作時間', key: 'working_hours', width: 18 }
+            ];
+            const headerRow = worksheet.getRow(1);
+            headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            headerRow.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FF2575FC' }
+            };
+            headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+            await workbook.xlsx.writeFile(filePath);
+        }
     }
 }
 

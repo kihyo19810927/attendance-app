@@ -38,7 +38,6 @@ function createWindow() {
 
 function createTray() {
     const iconPath = path.join(__dirname, 'assets/icon.png');
-    // Create simple tray
     tray = new Tray(iconPath);
     tray.setToolTip('考勤打卡系统 (后台静默运行中)');
 
@@ -79,12 +78,10 @@ function showNotification(title, body) {
 
 // App Lifecycle Events
 app.whenReady().then(async () => {
-    // Ensure assets directory & icon
     const assetsDir = path.join(__dirname, 'assets');
     if (!fs.existsSync(assetsDir)) fs.mkdirSync(assetsDir);
     const iconPath = path.join(assetsDir, 'icon.png');
     if (!fs.existsSync(iconPath)) {
-        // Create 1x1 dummy icon if missing
         fs.writeFileSync(iconPath, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64'));
     }
 
@@ -111,32 +108,41 @@ ipcMain.handle('get-records', async () => {
     return await dbHelper.getAllRecords();
 });
 
+ipcMain.handle('clear-records', async () => {
+    const config = await dbHelper.getAllConfig();
+    await dbHelper.clearAllRecords();
+    await excelSyncService.clearExcelRecords(config.employee_name || '紀標', config.excel_storage_dir);
+    return { success: true };
+});
+
 ipcMain.handle('open-excel-file', async () => {
     const config = await dbHelper.getAllConfig();
+    const storageDir = excelSyncService.resolveStorageDir(config.excel_storage_dir);
     const employeeName = config.employee_name || '紀標';
     const now = new Date();
     const yearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
     const fileName = `${employeeName}_${yearMonth}.xlsx`;
-    const filePath = path.join(__dirname, fileName);
+    const filePath = path.join(storageDir, fileName);
 
     if (fs.existsSync(filePath)) {
         await shell.openPath(filePath);
         return { success: true };
     } else {
-        return { success: false, message: '当月 Excel 文件尚未生成，打卡后将自动创建。' };
+        return { success: false, message: `当月 Excel 文件尚未在目录 [${storageDir}] 中生成，打卡后将自动创建。` };
     }
 });
 
 ipcMain.handle('open-archive-folder', async () => {
-    const archiveDir = path.join(__dirname, 'archive');
-    if (!fs.existsSync(archiveDir)) fs.mkdirSync(archiveDir, { recursive: true });
+    const config = await dbHelper.getAllConfig();
+    const storageDir = excelSyncService.resolveStorageDir(config.excel_storage_dir);
+    const archiveDir = excelSyncService.ensureArchiveDir(storageDir);
     await shell.openPath(archiveDir);
     return { success: true };
 });
 
 // Primary Punch-In / Punch-Out Execution
 ipcMain.handle('punch', async (event, params) => {
-    const { type, isAuto = false } = params; // 'clock-in' or 'clock-out'
+    const { type } = params;
     const config = await dbHelper.getAllConfig();
 
     const now = new Date();
@@ -146,7 +152,6 @@ ipcMain.handle('punch', async (event, params) => {
     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(date).padStart(2, '0')}`;
     const timeStr = now.toLocaleTimeString('zh-CN', { hour12: false });
 
-    // Check existing record
     const existing = await dbHelper.getTodayRecord(dateStr);
 
     if (type === 'clock-in' && existing && existing.clock_in_time) {
@@ -159,7 +164,6 @@ ipcMain.handle('punch', async (event, params) => {
         return { success: false, message: '今天尚未上班打卡，无法进行下班打卡！' };
     }
 
-    // Determine status based on configured time ranges
     let status = 'normal';
     if (type === 'clock-in') {
         const [mHour, mMin] = (config.morning_end_time || '09:30').split(':').map(Number);
@@ -171,7 +175,6 @@ ipcMain.handle('punch', async (event, params) => {
         if (curMins < eHour * 60 + eMin) status = 'early';
     }
 
-    // Build update object
     const recordUpdate = {
         record_date: dateStr,
         is_manual_entry: 0
@@ -193,10 +196,11 @@ ipcMain.handle('punch', async (event, params) => {
     // 1. Save to SQLite
     const savedRecord = await dbHelper.saveAttendanceRecord(recordUpdate);
 
-    // 2. Sync to local Excel
+    // 2. Sync to local Excel in configured storage directory
     try {
         await excelSyncService.syncRecord({
             employeeName: config.employee_name || '紀標',
+            configuredStorageDir: config.excel_storage_dir,
             dateStr: dateStr,
             clockInTime: savedRecord.clock_in_time,
             clockOutTime: savedRecord.clock_out_time
@@ -227,7 +231,6 @@ ipcMain.handle('punch', async (event, params) => {
         }
     }
 
-    // Desktop Toast Notification
     const typeTitle = type === 'clock-in' ? '上班打卡成功 ⏰' : '下班打卡成功 🌆';
     showNotification(typeTitle, `时间: ${timeStr} | 状态: ${status === 'normal' ? '正常' : status}`);
 
@@ -257,9 +260,10 @@ ipcMain.handle('manual-punch', async (event, params) => {
 
     const savedRecord = await dbHelper.saveAttendanceRecord(recordUpdate);
 
-    // Sync to Excel
+    // Sync to Excel in configured storage directory
     await excelSyncService.syncRecord({
         employeeName: config.employee_name || '紀標',
+        configuredStorageDir: config.excel_storage_dir,
         dateStr: dateStr,
         clockInTime: savedRecord.clock_in_time,
         clockOutTime: savedRecord.clock_out_time
