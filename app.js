@@ -65,7 +65,6 @@ class DesktopAttendanceApp {
 
             // Auto Punch Controls
             autoCheckinPanel: document.getElementById('auto-checkin-panel'),
-            autoCheckinToggle: document.getElementById('auto-checkin-toggle'),
             nextTargetType: document.getElementById('next-target-type'),
             targetTimeDisplay: document.getElementById('target-time-display'),
             countdownDisplay: document.getElementById('countdown-display')
@@ -104,8 +103,14 @@ class DesktopAttendanceApp {
         if (this.elements.userDisplay) {
             this.elements.userDisplay.textContent = `👤 ${cfg.employee_name || '紀標'}`;
         }
-        if (this.elements.autoCheckinToggle) {
-            this.elements.autoCheckinToggle.checked = cfg.auto_punch_enabled === '1';
+
+        // Show auto check-in panel ONLY if auto punch is enabled in settings
+        if (this.elements.autoCheckinPanel) {
+            if (cfg.auto_punch_enabled === '1') {
+                this.elements.autoCheckinPanel.classList.remove('hidden');
+            } else {
+                this.elements.autoCheckinPanel.classList.add('hidden');
+            }
         }
     }
 
@@ -144,16 +149,6 @@ class DesktopAttendanceApp {
         this.elements.closeSettingsBtn.addEventListener('click', () => this.closeSettingsModal());
         this.elements.cancelSettingsBtn.addEventListener('click', () => this.closeSettingsModal());
         this.elements.settingsForm.addEventListener('submit', (e) => this.handleSettingsSubmit(e));
-
-        // Auto Punch Toggle in Panel
-        if (this.elements.autoCheckinToggle) {
-            this.elements.autoCheckinToggle.addEventListener('change', async (e) => {
-                const isChecked = e.target.checked ? '1' : '0';
-                this.config.auto_punch_enabled = isChecked;
-                await window.electronAPI.saveConfig({ auto_punch_enabled: isChecked });
-                this.calculateNextRandomTarget();
-            });
-        }
     }
 
     async handlePunch(type) {
@@ -384,57 +379,98 @@ class DesktopAttendanceApp {
     }
 
     renderStats() {
-        const total = this.records.length;
-        const normal = this.records.filter(r => r.status_in === 'normal' && (r.status_out === 'normal' || !r.clock_out_time)).length;
-        const late = this.records.filter(r => r.status_in === 'late').length;
-        const early = this.records.filter(r => r.status_out === 'early').length;
+        // Expand into individual punch events for stats & list
+        let totalPunches = 0;
+        let normalCount = 0;
+        let lateCount = 0;
+        let earlyCount = 0;
 
-        this.elements.totalCount.textContent = total;
-        this.elements.normalCount.textContent = normal;
-        this.elements.lateCount.textContent = late;
-        this.elements.earlyDepartureCount.textContent = early;
+        this.records.forEach(r => {
+            if (r.clock_in_time) {
+                totalPunches++;
+                if (r.status_in === 'late') lateCount++;
+                else normalCount++;
+            }
+            if (r.clock_out_time) {
+                totalPunches++;
+                if (r.status_out === 'early') earlyCount++;
+                else normalCount++;
+            }
+        });
+
+        this.elements.totalCount.textContent = totalPunches;
+        this.elements.normalCount.textContent = normalCount;
+        this.elements.lateCount.textContent = lateCount;
+        this.elements.earlyDepartureCount.textContent = earlyCount;
     }
 
     renderRecords() {
         this.elements.recordsBody.innerHTML = '';
+
+        // Expand each record into individual punch events (打一次就是一行记录)
+        const punchEvents = [];
+
+        this.records.forEach(r => {
+            const isManual = r.is_manual_entry === 1;
+
+            if (r.clock_in_time) {
+                punchEvents.push({
+                    typeLabel: `上班打卡${isManual ? ' (手工补卡)' : ''}`,
+                    dateTimeStr: `${r.record_date} ${r.clock_in_time}`,
+                    status: r.status_in || 'normal',
+                    statusLabel: r.status_in === 'late' ? '迟到' : '正常',
+                    emailStatus: r.email_status || 'none',
+                    sortKey: `${r.record_date}T${r.clock_in_time}`
+                });
+            }
+
+            if (r.clock_out_time) {
+                punchEvents.push({
+                    typeLabel: `下班打卡${isManual ? ' (手工补卡)' : ''}`,
+                    dateTimeStr: `${r.record_date} ${r.clock_out_time}`,
+                    status: r.status_out || 'normal',
+                    statusLabel: r.status_out === 'early' ? '早退' : '正常',
+                    emailStatus: r.email_status || 'none',
+                    sortKey: `${r.record_date}T${r.clock_out_time}`
+                });
+            }
+        });
+
+        // Sort by time DESC (newest punch at top)
+        punchEvents.sort((a, b) => b.sortKey.localeCompare(a.sortKey));
         
-        if (this.records.length === 0) {
+        if (punchEvents.length === 0) {
             const emptyRow = document.createElement('tr');
-            emptyRow.innerHTML = '<td colspan="5" style="text-align: center; color: var(--text-secondary);">暂无考勤历史记录</td>';
+            emptyRow.innerHTML = '<td colspan="4" style="text-align: center; color: var(--text-secondary);">暂无考勤历史记录</td>';
             this.elements.recordsBody.appendChild(emptyRow);
             return;
         }
 
-        this.records.forEach(r => {
+        punchEvents.forEach(p => {
             const row = document.createElement('tr');
 
-            const dateCell = document.createElement('td');
-            dateCell.textContent = r.record_date;
+            const typeCell = document.createElement('td');
+            typeCell.textContent = p.typeLabel;
 
-            const inCell = document.createElement('td');
-            inCell.innerHTML = r.clock_in_time 
-                ? `${r.clock_in_time} ${r.status_in === 'late' ? '<span style="color:var(--danger-color);">(迟到)</span>' : ''}`
-                : '--';
+            const timeCell = document.createElement('td');
+            timeCell.textContent = p.dateTimeStr;
 
-            const outCell = document.createElement('td');
-            outCell.innerHTML = r.clock_out_time 
-                ? `${r.clock_out_time} ${r.status_out === 'early' ? '<span style="color:var(--warning-color);">(早退)</span>' : ''}`
-                : '--';
-
-            const hoursCell = document.createElement('td');
-            hoursCell.textContent = r.working_hours || '--';
+            const statusCell = document.createElement('td');
+            let colorStyle = 'color:var(--success-color)';
+            if (p.status === 'late') colorStyle = 'color:var(--danger-color)';
+            if (p.status === 'early') colorStyle = 'color:var(--warning-color)';
+            statusCell.innerHTML = `<span style="${colorStyle}; font-weight: 500;">${p.statusLabel}</span>`;
 
             const emailCell = document.createElement('td');
-            const emailState = r.email_status || 'none';
+            const emailState = p.emailStatus;
             const emailBadge = document.createElement('span');
             emailBadge.className = `email-badge email-${emailState}`;
             emailBadge.textContent = emailState === 'sent' ? '已发送' : (emailState === 'failed' ? '发送失败' : '未发送');
             emailCell.appendChild(emailBadge);
 
-            row.appendChild(dateCell);
-            row.appendChild(inCell);
-            row.appendChild(outCell);
-            row.appendChild(hoursCell);
+            row.appendChild(typeCell);
+            row.appendChild(timeCell);
+            row.appendChild(statusCell);
             row.appendChild(emailCell);
             this.elements.recordsBody.appendChild(row);
         });

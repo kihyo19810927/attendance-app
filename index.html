@@ -30,14 +30,10 @@
         </header>
 
         <main class="main-content">
-            <!-- 随机自动打卡引擎控制面板 -->
-            <section class="auto-checkin-panel" id="auto-checkin-panel">
+            <!-- 随机自动打卡引擎控制面板 (在设置未开启时隐藏) -->
+            <section class="auto-checkin-panel hidden" id="auto-checkin-panel">
                 <div class="panel-header">
                     <h2 class="section-title">⚡ 随机自动打卡引擎</h2>
-                    <label class="switch-container">
-                        <input type="checkbox" id="auto-checkin-toggle" checked>
-                        <span class="slider round"></span>
-                    </label>
                 </div>
                 <div class="panel-content">
                     <div class="auto-status-card">
@@ -90,11 +86,10 @@
                     <table class="records-table">
                         <thead>
                             <tr>
-                                <th>日期</th>
-                                <th>出社时间</th>
-                                <th>退社时间</th>
-                                <th>工作时间</th>
-                                <th>邮件发信状态</th>
+                                <th>类型</th>
+                                <th>时间</th>
+                                <th>状态</th>
+                                <th>邮件发送状态</th>
                             </tr>
                         </thead>
                         <tbody id="records-body">
