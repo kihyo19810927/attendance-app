@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>考勤打卡系统</title>
+    <title>考勤打卡桌面客户端</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⏰</text></svg>">
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
@@ -12,14 +12,14 @@
     <div class="app-container">
         <header class="header">
             <div class="header-top">
-                <h1 class="title">考勤打卡系统</h1>
+                <div class="brand">
+                    <h1 class="title">考勤打卡桌面客户端</h1>
+                    <span id="user-display" class="user-display">👤 紀標</span>
+                </div>
                 <div class="header-actions">
-                    <div id="user-badge" class="user-badge hidden">
-                        <span class="user-icon">👤</span>
-                        <span id="user-display-name">已登录</span>
-                        <button id="logout-btn" class="logout-btn" title="退出登录">退出</button>
-                    </div>
-                    <button id="login-btn" class="login-btn">🔑 登录 / 注册</button>
+                    <button id="open-excel-btn" class="nav-btn" title="打开当月 Excel">📁 打开当月 Excel</button>
+                    <button id="open-archive-btn" class="nav-btn" title="打开归档目录">📂 归档目录</button>
+                    <button id="manual-punch-btn" class="nav-btn highlight-btn" title="手工补打卡">📝 补打卡/修正</button>
                     <button id="settings-btn" class="settings-btn" title="系统设置">⚙️ 设置</button>
                 </div>
             </div>
@@ -30,7 +30,7 @@
         </header>
 
         <main class="main-content">
-            <!-- 随机自动打卡引擎控制面板 (Task 3) -->
+            <!-- 随机自动打卡引擎控制面板 -->
             <section class="auto-checkin-panel" id="auto-checkin-panel">
                 <div class="panel-header">
                     <h2 class="section-title">⚡ 随机自动打卡引擎</h2>
@@ -43,7 +43,7 @@
                     <div class="auto-status-card">
                         <div class="auto-info-item">
                             <span class="info-label">预定打卡类型</span>
-                            <span id="next-target-type" class="info-value">上班打卡 (09:25-09:30)</span>
+                            <span id="next-target-type" class="info-value">上班打卡</span>
                         </div>
                         <div class="auto-info-item">
                             <span class="info-label">随机目标时刻</span>
@@ -81,19 +81,20 @@
                 <button id="clock-out-btn" class="action-btn clock-out-btn">下班打卡</button>
             </section>
 
-            <!-- Email / Sync Toast Notification -->
+            <!-- Notification Toast -->
             <div id="email-toast" class="toast hidden"></div>
 
             <section class="history-panel">
-                <h2 class="section-title">打卡记录</h2>
+                <h2 class="section-title">考勤历史记录</h2>
                 <div class="table-container">
                     <table class="records-table">
                         <thead>
                             <tr>
-                                <th>类型</th>
-                                <th>时间</th>
-                                <th>状态</th>
-                                <th>邮件发送状态</th>
+                                <th>日期</th>
+                                <th>出社时间</th>
+                                <th>退社时间</th>
+                                <th>工作时间</th>
+                                <th>邮件发信状态</th>
                             </tr>
                         </thead>
                         <tbody id="records-body">
@@ -101,121 +102,154 @@
                         </tbody>
                     </table>
                 </div>
-                <button id="clear-btn" class="clear-btn">清空打卡记录</button>
             </section>
         </main>
     </div>
 
-    <!-- System Settings Modal (Task 1) -->
-    <div id="settings-modal" class="modal-backdrop hidden">
+    <!-- 📝 手工补打卡 Modal -->
+    <div id="manual-modal" class="modal-backdrop hidden">
         <div class="modal-card">
             <div class="modal-header">
-                <h2 class="modal-title">系统设置 ⚙️</h2>
-                <button id="close-settings-btn" class="modal-close-btn">&times;</button>
+                <h2 class="modal-title">📝 考勤补打卡 / 历史数据修正</h2>
+                <button id="close-manual-btn" class="modal-close-btn">&times;</button>
             </div>
-            <form id="settings-form" class="modal-body">
-                <div class="form-section-title">👤 个人信息注册</div>
+            <form id="manual-form" class="modal-body">
                 <div class="form-group">
-                    <label for="employee-name">员工姓名 (名前) <span class="required-star">*</span></label>
-                    <input type="text" id="employee-name" class="form-control" placeholder="例如: 紀標" required>
-                </div>
-
-                <div class="form-section-title">📧 邮箱通知设置</div>
-                <div class="form-group">
-                    <label for="hr-email">HR 接收邮箱 <span class="required-star">*</span></label>
-                    <input type="email" id="hr-email" class="form-control" placeholder="hr@company.com" required>
+                    <label for="manual-date">📅 补卡日期 <span class="required-star">*</span></label>
+                    <input type="date" id="manual-date" class="form-control" required>
                 </div>
                 <div class="form-group">
-                    <label for="user-email">个人邮箱 (抄送 CC) <span class="required-star">*</span></label>
-                    <input type="email" id="user-email" class="form-control" placeholder="employee@company.com" required>
+                    <label>📌 补卡类型</label>
+                    <div class="radio-group">
+                        <label><input type="radio" name="manual-type" value="in"> 仅补出社(上班)</label>
+                        <label><input type="radio" name="manual-type" value="out"> 仅补退社(下班)</label>
+                        <label><input type="radio" name="manual-type" value="both" checked> 全天补打卡</label>
+                    </div>
                 </div>
-
-                <div class="form-section-title">🔧 SMTP 发送服务配置</div>
                 <div class="form-row">
-                    <div class="form-group col-8">
-                        <label for="smtp-host">SMTP 服务器</label>
-                        <input type="text" id="smtp-host" class="form-control" placeholder="smtp.qq.com">
+                    <div class="form-group col-6">
+                        <label for="manual-clock-in">⏰ 出社时刻 (HH:mm:ss)</label>
+                        <input type="time" step="1" id="manual-clock-in" class="form-control" value="09:28:00">
                     </div>
-                    <div class="form-group col-4">
-                        <label for="smtp-port">端口</label>
-                        <input type="number" id="smtp-port" class="form-control" placeholder="465">
+                    <div class="form-group col-6">
+                        <label for="manual-clock-out">🌆 退社时刻 (HH:mm:ss)</label>
+                        <input type="time" step="1" id="manual-clock-out" class="form-control" value="18:35:00">
                     </div>
                 </div>
                 <div class="form-group">
-                    <label for="smtp-user">SMTP 账号</label>
-                    <input type="text" id="smtp-user" class="form-control" placeholder="your_email@qq.com">
-                </div>
-                <div class="form-group">
-                    <label for="smtp-pass">SMTP 密码 / 授权码</label>
-                    <input type="password" id="smtp-pass" class="form-control" placeholder="如 QQ 邮箱授权码">
+                    <label for="manual-notes">💬 补卡备注/原因</label>
+                    <input type="text" id="manual-notes" class="form-control" placeholder="例: 忘记打卡 / 公出">
                 </div>
                 <div class="form-group checkbox-group">
                     <label class="checkbox-label">
-                        <input type="checkbox" id="auto-email-toggle" checked>
-                        <span>打卡成功后自动发送邮件通知 HR 并 CC 给自己</span>
+                        <input type="checkbox" id="manual-email-toggle" checked>
+                        <span>补打卡完成后自动发送邮件通知 HR</span>
                     </label>
                 </div>
-                <div id="settings-msg" class="settings-msg hidden"></div>
                 <div class="modal-footer">
-                    <button type="button" id="cancel-settings-btn" class="btn btn-secondary">取消</button>
-                    <button type="submit" class="btn btn-primary">保存设置</button>
+                    <button type="button" id="cancel-manual-btn" class="btn btn-secondary">取消</button>
+                    <button type="submit" class="btn btn-primary">提交补卡</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- User Authentication Modal (Multi-User Login / Register) -->
-    <div id="auth-modal" class="modal-backdrop hidden">
-        <div class="modal-card">
+    <!-- ⚙️ 全量系统设置 Modal -->
+    <div id="settings-modal" class="modal-backdrop hidden">
+        <div class="modal-card wide-modal">
             <div class="modal-header">
-                <div class="auth-tabs">
-                    <button type="button" id="tab-login-btn" class="auth-tab-btn active">🔑 账号登录</button>
-                    <button type="button" id="tab-register-btn" class="auth-tab-btn">📝 用户注册</button>
-                </div>
-                <button id="close-auth-btn" class="modal-close-btn">&times;</button>
+                <h2 class="modal-title">系统设置 ⚙️</h2>
+                <button id="close-settings-btn" class="modal-close-btn">&times;</button>
             </div>
-            
-            <!-- Login Form -->
-            <form id="login-form" class="modal-body auth-form">
+            <form id="settings-form" class="modal-body">
+                <div class="form-section-title">👤 个人信息</div>
                 <div class="form-group">
-                    <label for="login-username">用户名 / 电子邮箱</label>
-                    <input type="text" id="login-username" class="form-control" placeholder="请输入用户名或邮箱" required>
+                    <label for="cfg-employee-name">员工姓名 (名前) <span class="required-star">*</span></label>
+                    <input type="text" id="cfg-employee-name" class="form-control" placeholder="例: 紀標" required>
                 </div>
-                <div class="form-group">
-                    <label for="login-password">密码</label>
-                    <input type="password" id="login-password" class="form-control" placeholder="请输入密码" required>
-                </div>
-                <div id="login-error-msg" class="auth-error-msg hidden"></div>
-                <div class="modal-footer">
-                    <button type="submit" class="btn btn-primary full-width">立即登录</button>
-                </div>
-            </form>
 
-            <!-- Register Form -->
-            <form id="register-form" class="modal-body auth-form hidden">
+                <div class="form-section-title">📧 邮件收件与抄送设置</div>
                 <div class="form-group">
-                    <label for="reg-username">用户名 <span class="required-star">*</span></label>
-                    <input type="text" id="reg-username" class="form-control" placeholder="3位以上字符" required minlength="3">
+                    <label for="cfg-email-to">收件人 (To) <span class="required-star">*</span> <span class="help-text">(多个邮箱用英文分号 ';' 分隔)</span></label>
+                    <input type="text" id="cfg-email-to" class="form-control" placeholder="hr1@company.com; hr2@company.com" required>
                 </div>
                 <div class="form-group">
-                    <label for="reg-employee-name">员工姓名 (名前) <span class="required-star">*</span></label>
-                    <input type="text" id="reg-employee-name" class="form-control" placeholder="例如: 紀標" required>
+                    <label for="cfg-email-cc">抄送人 (CC) <span class="help-text">(可选，多个邮箱用英文分号 ';' 分隔)</span></label>
+                    <input type="text" id="cfg-email-cc" class="form-control" placeholder="leader@company.com; self@company.com">
                 </div>
                 <div class="form-group">
-                    <label for="reg-email">个人电子邮箱 <span class="required-star">*</span></label>
-                    <input type="email" id="reg-email" class="form-control" placeholder="your_name@company.com" required>
+                    <label for="cfg-email-subject">邮件主题模板 <span class="help-text">(可用变量: {employeeName}, {date}, {type}, {status})</span></label>
+                    <input type="text" id="cfg-email-subject" class="form-control">
                 </div>
                 <div class="form-group">
-                    <label for="reg-password">密码 <span class="required-star">*</span></label>
-                    <input type="password" id="reg-password" class="form-control" placeholder="至少6位密码" required minlength="6">
+                    <label for="cfg-email-body">邮件正文模板 <span class="help-text">(可用变量: {employeeName}, {type}, {date}, {time}, {status}, {workingHours})</span></label>
+                    <textarea id="cfg-email-body" class="form-control" rows="6"></textarea>
                 </div>
-                <div class="form-group">
-                    <label for="reg-confirm-password">确认密码 <span class="required-star">*</span></label>
-                    <input type="password" id="reg-confirm-password" class="form-control" placeholder="再次输入密码" required minlength="6">
+
+                <div class="form-section-title">🔧 SMTP 发送服务配置</div>
+                <div class="form-row">
+                    <div class="form-group col-8">
+                        <label for="cfg-smtp-host">SMTP 服务器</label>
+                        <input type="text" id="cfg-smtp-host" class="form-control" placeholder="smtp.wadax-sv.jp">
+                    </div>
+                    <div class="form-group col-4">
+                        <label for="cfg-smtp-port">端口</label>
+                        <input type="number" id="cfg-smtp-port" class="form-control" placeholder="587">
+                    </div>
                 </div>
-                <div id="reg-error-msg" class="auth-error-msg hidden"></div>
+                <div class="form-row">
+                    <div class="form-group col-6">
+                        <label for="cfg-smtp-user">SMTP 账号</label>
+                        <input type="text" id="cfg-smtp-user" class="form-control" placeholder="jibiao@haonova.co.jp">
+                    </div>
+                    <div class="form-group col-6">
+                        <label for="cfg-smtp-pass">SMTP 密码 / 授权码</label>
+                        <input type="password" id="cfg-smtp-pass" class="form-control">
+                    </div>
+                </div>
+                <div class="form-group checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="cfg-auto-email">
+                        <span>打卡成功后自动发送邮件通知</span>
+                    </label>
+                </div>
+
+                <div class="form-section-title">⚡ 随机自动打卡 (含节假日判定)</div>
+                <div class="form-group checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="cfg-auto-punch">
+                        <span>开启随机打卡引擎</span>
+                    </label>
+                </div>
+                <div class="form-row">
+                    <div class="form-group col-6">
+                        <label>上班打卡随机时间范围 (默认 09:25 ~ 09:30)</label>
+                        <div class="time-range-group">
+                            <input type="time" id="cfg-morning-start" class="form-control" value="09:25">
+                            <span>至</span>
+                            <input type="time" id="cfg-morning-end" class="form-control" value="09:30">
+                        </div>
+                    </div>
+                    <div class="form-group col-6">
+                        <label>下班打卡随机时间范围 (默认 18:30 ~ 19:00)</label>
+                        <div class="time-range-group">
+                            <input type="time" id="cfg-evening-start" class="form-control" value="18:30">
+                            <span>至</span>
+                            <input type="time" id="cfg-evening-end" class="form-control" value="19:00">
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="cfg-skip-holidays">
+                        <span>周末及法定节假日自动休眠（暂停自动打卡，手动仍可打卡）</span>
+                    </label>
+                </div>
+
+                <div id="settings-msg" class="settings-msg hidden"></div>
                 <div class="modal-footer">
-                    <button type="submit" class="btn btn-success full-width">注册并登录</button>
+                    <button type="button" id="cancel-settings-btn" class="btn btn-secondary">取消</button>
+                    <button type="submit" class="btn btn-primary">保存全量设置</button>
                 </div>
             </form>
         </div>
